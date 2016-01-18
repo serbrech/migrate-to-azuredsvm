@@ -75,11 +75,11 @@ Param
     [string] $DestServiceName,
 
     [Parameter (Mandatory = $true)]
-    [ValidateSet('West US','East US 2','West Europe','East China','Southeast Asia','West Japan', ignorecase=$true)]
+    
     [string] $Location,
 
     [Parameter (Mandatory = $true)]
-    [ValidateSet('Standard_DS1','Standard_DS2','Standard_DS3','Standard_DS4','Standard_DS11','Standard_DS12','Standard_DS13','Standard_DS14', ignorecase=$true)]
+    
     [string] $VMSize,
 
     [Parameter (Mandatory = $true)]
@@ -87,6 +87,9 @@ Param
 
     [Parameter (Mandatory = $true)]
     [string] $DestStorageAccountContainer,
+
+	[Parameter (Mandatory = $true)]
+    [string] $SubscriptionName,
 
     [Parameter (Mandatory = $false)]
     [string] $VNetName,
@@ -106,6 +109,9 @@ $StorageAccountTypePremium = 'Premium_LRS'
 #validation section
 #Perform as much upfront validation as possible
 #############################################################################################################
+
+Write-Host "Setting the default azure subscription"
+Set-AzureSubscription -SubscriptionName $SubscriptionName
 
 #validate upfront that this service we are trying to create already exists
 if((Get-AzureService -ServiceName $DestServiceName -ErrorAction SilentlyContinue) -ne $null)
@@ -174,7 +180,7 @@ $SourceVM = Get-AzureVM -Name $SourceVMName -ServiceName $SourceServiceName -Err
 
 if($SourceVM -eq $null)
 {
-    Write-Error "Unable to find Virtual Machine [$SourceServiceName] in Service Name [$SourceServiceName]"
+    Write-Error "Unable to find Virtual Machine [$SourceVMName] in Service Name [$SourceServiceName]"
     return
 }
 
@@ -350,6 +356,8 @@ $finishTime = Get-Date
 $TotalTime = ($finishTime - $startTime).TotalSeconds 
 Write-Host "The disk copies completed in $TotalTime seconds." -ForegroundColor Green
 
+Write-Host "Changing the default azure subscription to be able to get vm config."
+Set-AzureSubscription -SubscriptionName $SubscriptionName -CurrentStorageAccount $DestStorageAccountName
 
 Write-Host "Registering Copied Disk" -ForegroundColor Green
 
@@ -383,7 +391,7 @@ foreach($diskName in $disk_configs.Keys)
            #Expect OS Disk to be the first disk in the array
            $OSDisk = Add-AzureDisk -DiskName $newDiskName -OS $diskConfig[1] -MediaLocation $diskConfig[0]
 
-           $vmconfig = New-AzureVMConfig -Name $DestVMName -InstanceSize $VMSize -DiskName $OSDisk.DiskName  
+           $vmconfig = New-AzureVMConfig -Name $DestVMName -InstanceSize $VMSize -DiskName $OSDisk.DiskName
 
         }
         else
