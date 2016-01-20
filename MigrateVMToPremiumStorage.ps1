@@ -114,11 +114,11 @@ Write-Host "Setting the default azure subscription"
 Set-AzureSubscription -SubscriptionName $SubscriptionName
 
 #validate upfront that this service we are trying to create already exists
-if((Get-AzureService -ServiceName $DestServiceName -ErrorAction SilentlyContinue) -ne $null)
-{
-    Write-Error "Service [$DestServiceName] already exists"
-    return
-}
+#if((Get-AzureService -ServiceName $DestServiceName -ErrorAction SilentlyContinue) -ne $null)
+#{
+    #Write-Error "Service [$DestServiceName] already exists"
+    #return
+#}
 
 #Determine we are migrating the VM to a Virtual network. If it is then verify that VNET exists
 if( !$VNetName -and !$SubnetName )
@@ -426,23 +426,23 @@ foreach($lun in $datadisk_details.Keys)
 
 
 #read all the end points in the source VM and create them in the destination VM
-#NOTE: I don't copy ACL's yet. I need to add this.
-$SourceVM | get-azureendpoint | foreach {
+#RavenHQ: We don't care about setting up endpoints on the target
+#$SourceVM | get-azureendpoint | foreach {
+#
+#    if($_.LBSetName -eq $null)
+#    {
+#        write-Host "Name is [$($_.Name)], Port is [$($_.Port)], LocalPort is [$($_.LocalPort)], Protocol is [$($_.Protocol)], EnableDirectServerReturn is [$($_.EnableDirectServerReturn)]]"
+#        $vmconfig | Add-AzureEndpoint -Name $_.Name -LocalPort $_.LocalPort -PublicPort $_.Port -Protocol $_.Protocol -DirectServerReturn $_.EnableDirectServerReturn
+#    }
+#    else
+#    {
+#        write-Host "Name is [$($_.Name)], Port is [$($_.Port)], LocalPort is [$($_.LocalPort)], Protocol is [$($_.Protocol)], EnableDirectServerReturn is [$($_.EnableDirectServerReturn)], LBSetName is [$($_.LBSetName)]"        
+#        $vmconfig | Add-AzureEndpoint -Name $_.Name -LocalPort $_.LocalPort -PublicPort $_.Port -Protocol $_.Protocol -DirectServerReturn $_.EnableDirectServerReturn -LBSetName $_.LBSetName -DefaultProbe
+#    }
+#}
 
-    if($_.LBSetName -eq $null)
-    {
-        write-Host "Name is [$($_.Name)], Port is [$($_.Port)], LocalPort is [$($_.LocalPort)], Protocol is [$($_.Protocol)], EnableDirectServerReturn is [$($_.EnableDirectServerReturn)]]"
-        $vmconfig | Add-AzureEndpoint -Name $_.Name -LocalPort $_.LocalPort -PublicPort $_.Port -Protocol $_.Protocol -DirectServerReturn $_.EnableDirectServerReturn
-    }
-    else
-    {
-        write-Host "Name is [$($_.Name)], Port is [$($_.Port)], LocalPort is [$($_.LocalPort)], Protocol is [$($_.Protocol)], EnableDirectServerReturn is [$($_.EnableDirectServerReturn)], LBSetName is [$($_.LBSetName)]"        
-        $vmconfig | Add-AzureEndpoint -Name $_.Name -LocalPort $_.LocalPort -PublicPort $_.Port -Protocol $_.Protocol -DirectServerReturn $_.EnableDirectServerReturn -LBSetName $_.LBSetName -DefaultProbe
-    }
-}
 
-
-# 
+# Deploy VM
 if( $DeployToVnet )
 {
     Write-Host "Virtual Network Name is [$VNetName] and Subnet Name is [$SubnetName]" 
