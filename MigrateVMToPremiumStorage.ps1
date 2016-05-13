@@ -27,8 +27,8 @@ It can be easily extended to support migrating to a different subscription as we
 .PARAMETER SourceVMName
 The name of the VM that needs to be migrated
 
-.PARAMTER SourceServiceName
-The name of service for the old VM
+.PARAMTER ResourceGroupName
+The name of the resource group for the old VM
 
 .PARAMETER DestVMName
 The name of New DS Series VM that will be created.
@@ -66,13 +66,13 @@ Param
     [string] $SourceVMName,
 
     [Parameter (Mandatory = $true)]
-    [string] $SourceServiceName,
+    [string] $ResourceGroupName,
 
     [Parameter (Mandatory = $true)]
     [string] $DestVMName,
 
     [Parameter (Mandatory = $true)]
-    [string] $DestServiceName,
+    [string] $DestResourceGroup,
 
     [Parameter (Mandatory = $true)]
     
@@ -110,13 +110,13 @@ $StorageAccountTypePremium = 'Premium_LRS'
 #Perform as much upfront validation as possible
 #############################################################################################################
 
-Write-Host "Setting the default azure subscription"
-Set-AzureSubscription -SubscriptionName $SubscriptionName
+#Write-Host "Setting the default azure subscription"
+#Set-AzureSubscription -SubscriptionName $SubscriptionName
 
 #validate upfront that this service we are trying to create already exists
-#if((Get-AzureService -ServiceName $DestServiceName -ErrorAction SilentlyContinue) -ne $null)
+#if((Get-AzureRmResourceGroup -Name $DestResourceGroup -ErrorAction SilentlyContinue) -ne $null)
 #{
-    #Write-Error "Service [$DestServiceName] already exists"
+    #Write-Error "Service [$DestResourceGroup] already exists"
     #return
 #}
 
@@ -128,7 +128,7 @@ if( !$VNetName -and !$SubnetName )
 else
 {
     $DeployToVNet = $true
-    $vnetSite = Get-AzureVNetSite -VNetName $VNetName -ErrorAction SilentlyContinue
+    $vnetSite = Get-AzureRmVirtualNetwork -Name $VNetName -ResourceGroupName Network -ErrorAction SilentlyContinue
 
     if (!$vnetSite)
     {
@@ -142,7 +142,7 @@ Write-Host "DepoyToVNet is set to [$DeployToVnet]"
 
 #TODO: add validation to make sure the destination VM size can accomodate the number of disk in the source VM
 
-$DestStorageAccount = Get-AzureStorageAccount -StorageAccountName $DestStorageAccountName -ErrorAction SilentlyContinue
+$DestStorageAccount = Get-AzureRmStorageAccount -Name $DestStorageAccountName -ResourceGroupName $DestResourceGroup -ErrorAction SilentlyContinue
 
 #check to see if the storage account exists and create a premium storage account if it does not exist
 if(!$DestStorageAccount)
@@ -151,7 +151,7 @@ if(!$DestStorageAccount)
     Write-Output "";
     Write-Output ("Configuring Destination Storage Account {0} in location {1}" -f $DestStorageAccountName, $Location);
 
-    $DestStorageAccount = New-AzureStorageAccount -StorageAccountName $DestStorageAccountName -Location $Location -Type $StorageAccountTypePremium -ErrorVariable errorVariable -ErrorAction SilentlyContinue | Out-Null
+    $DestStorageAccount = New-AzureRmStorageAccount -Name $DestStorageAccountName -ResourceGroupName $DestResourceGroup -Location $Location -Type $StorageAccountTypePremium -ErrorVariable errorVariable -ErrorAction SilentlyContinue | Out-Null
 
     if (!($?)) 
     { 
@@ -173,14 +173,14 @@ else
 }
 
 
-Write-Host "Source VM Name is [$SourceVMName] and Service Name is [$SourceServiceName]"
+Write-Host "Source VM Name is [$SourceVMName] and ResourceGroup is [$ResourceGroupName]"
 
 #Get VM Details
-$SourceVM = Get-AzureVM -Name $SourceVMName -ServiceName $SourceServiceName -ErrorAction SilentlyContinue
+$SourceVM = Get-AzureRmVM -Name $SourceVMName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
 
 if($SourceVM -eq $null)
 {
-    Write-Error "Unable to find Virtual Machine [$SourceVMName] in Service Name [$SourceServiceName]"
+    Write-Error "Unable to find Virtual Machine [$SourceVMName] in Service Name [$ResourceGroupName]"
     return
 }
 
@@ -193,13 +193,13 @@ if($SourceVM.Status -eq "ReadyRole")
 {
     Write-Host "Shutting down virtual machine [$SourceVMName]"
     #Shutdown the VM
-    Stop-AzureVM -ServiceName $SourceServiceName -Name $SourceVMName -Force
+    Stop-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $SourceVMName -Force
 }
 
 
-$osdisk = $SourceVM | Get-AzureOSDisk
+$osdisk = $SourceVM.StorageProfile.OsDisk
 
-Write-Host "OS Disk name is $($osdisk.DiskName) and disk location is $($osdisk.MediaLink)"
+Write-Host "OS Disk name is $($osdisk.Name) and disk location is $($osdisk.Vhd.Uri)"
 
 $disk_configs = @{}
 
@@ -223,8 +223,8 @@ function StartCopyVHD($sourceDiskUri, $diskName, $OS, $destStorageAccountName, $
     $vhdName = $sourceDiskUri.Segments[$sourceDiskUri.Segments.Length - 1].Replace("%20"," ") 
     $sourceContainer = $sourceDiskUri.Segments[$sourceDiskUri.Segments.Length - 2].Replace("/", "")
 
-    $sourceStorageAccountKey = (Get-AzureStorageKey -StorageAccountName $sourceStorageAccountName).Primary
-    $sourceContext = New-AzureStorageContext -StorageAccountName $sourceStorageAccountName -StorageAccountKey $sourceStorageAccountKey
+    $sourceStorageAccountKey = (Get-AzureRmStorageKey -Name $sourceStorageAccountName).Primary
+    $sourceContext = New-AzureRmStorageContext -StorageAccountName $sourceStorageAccountName -StorageAccountKey $sourceStorageAccountKey
 
     $destStorageAccountKey = (Get-AzureStorageKey -StorageAccountName $destStorageAccountName).Primary
     $destContext = New-AzureStorageContext -StorageAccountName $destStorageAccountName -StorageAccountKey $destStorageAccountKey
@@ -325,7 +325,7 @@ $startTime = Get-Date
 Write-Host "Destination storage account name is [$DestStorageAccountName]"
 
 # Copy disks using the async API from the source URL to the destination storage account
-$diskCopyStates += StartCopyVHD -sourceDiskUri $osdisk.MediaLink -destStorageAccount $DestStorageAccountName -destContainer $DestStorageAccountContainer -diskName $osdisk.DiskName -OS $osdisk.OS
+$diskCopyStates += StartCopyVHD -sourceDiskUri $osdisk.Vhd.Uri -destStorageAccount $DestStorageAccountName -destContainer $DestStorageAccountContainer -diskName $osdisk.Name -OS $osdisk.OSType
 
 
 # copy all the data disks
